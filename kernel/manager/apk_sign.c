@@ -19,6 +19,31 @@
 #include "klog.h" // IWYU pragma: keep
 #include "compat/kernel_compat.h"
 
+static struct apk_sign_key {
+    unsigned size;
+    const char *sha256;
+} apk_sign_keys[] = {
+	// Oficial (tiann/KernelSU)
+	{ 0x033b, "c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6" },
+	// RKSU (rsuntk/KernelSU)
+	{ 0x396, "f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b" },
+	// KowSU (KOWX712/KernelSU)
+	{ 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588" },
+	// Kernel-SU Next (KernelSU-Next/KernelSU-Next)
+	{ 0x3e6, "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7" },
+	// SukiSU (ShirkNeko/KernelSU)
+	{ 0x35c, "947ae944f3de4ed4c21a7e4f7953ecf351bfa2b36239da37a34111ad29993eef" },
+	// MamboSU (RapliVx/KernelSU)
+	{ 0x384, "a9462b8b98ea1ca7901b0cbdcebfaa35f0aa95e51b01d66e6b6d2c81b97746d8" },
+	// Wild KSU (WildKernels/Wild_KSU)
+	{ 0x381, "52d52d8c8bfbe53dc2b6ff1c613184e2c03013e090fe8905d8e3d5dc2658c2e4" },
+	// ReSukiSU (ReSukiSU/ReSukiSU)
+	{ 0x377, "d3469712b6214462764a1d8d3e5cbe1d6819a0b629791b9f4101867821f1df64" },
+#ifdef EXPECTED_SIZE
+	{ EXPECTED_SIZE, EXPECTED_HASH }, // Custom
+#endif
+};
+
 struct sdesc {
 	struct shash_desc shash;
 	char ctx[];
@@ -74,6 +99,8 @@ static int ksu_sha256(const unsigned char *data, unsigned int datalen,
 static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 			unsigned expected_size, const char *expected_sha256)
 {
+	int i;
+	struct apk_sign_key sign_key;
 	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signer-sequence length
 	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signer length
 	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signed data length
@@ -89,33 +116,34 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 	ksu_kernel_read_compat(fp, size4, 0x4, pos); // certificate length
 	*offset += 0x4 * 2;
 
-	if (*size4 == expected_size) {
-		*offset += *size4;
-
+  for (i = 0; i < ARRAY_SIZE(apk_sign_keys); i++) {
+    sign_key = apk_sign_keys[i];
+    if (*size4 != sign_key.size)
+      continue;
+    *offset += *size4;  
 #define CERT_MAX_LENGTH 1024
-		char cert[CERT_MAX_LENGTH];
-		if (*size4 > CERT_MAX_LENGTH) {
-			pr_info("cert length overlimit\n");
-			return false;
-		}
-		ksu_kernel_read_compat(fp, cert, *size4, pos);
-		unsigned char digest[SHA256_DIGEST_SIZE];
-		if (ksu_sha256(cert, *size4, digest) < 0 ) {
-			pr_info("sha256 error\n");
-			return false;
-		}
+    char cert[CERT_MAX_LENGTH];
+    if (*size4 > CERT_MAX_LENGTH) {
+      pr_info("cert length overlimit\n");
+      return false;
+    }
+    kernel_read(fp, cert, *size4, pos);
+    unsigned char digest[SHA256_DIGEST_SIZE];
+    if (IS_ERR(ksu_sha256(cert, *size4, digest))) {
+        pr_info("sha256 error\n");
+        return false;
+    }
 
-		char hash_str[SHA256_DIGEST_SIZE * 2 + 1];
-		hash_str[SHA256_DIGEST_SIZE * 2] = '\0';
+    char hash_str[SHA256_DIGEST_SIZE * 2 + 1];
+    hash_str[SHA256_DIGEST_SIZE * 2] = '\0';
 
-		bin2hex(hash_str, digest, SHA256_DIGEST_SIZE);
-		pr_info("sha256: %s, expected: %s\n", hash_str,
-			expected_sha256);
-		if (strcmp(expected_sha256, hash_str) == 0) {
-			return true;
-		}
-	}
-	return false;
+    bin2hex(hash_str, digest, SHA256_DIGEST_SIZE);
+    pr_info("sha256: %s, expected: %s\n", hash_str, sign_key.sha256);
+    if (strcmp(sign_key.sha256, hash_str) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 struct zip_entry_header {

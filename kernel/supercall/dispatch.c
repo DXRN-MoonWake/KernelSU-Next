@@ -576,6 +576,114 @@ static int do_nuke_ext4_sysfs(void __user *arg)
     return nuke_ext4_sysfs(mnt);
 }
 
+// SukiSU-Ultra Compatibility
+static int do_sukisu_get_full_version(void __user *arg)
+{
+	struct ksu_sukisu_get_full_version_cmd cmd;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
+	strscpy(cmd.version_full, SUKISU_ULTRA_VERSION_FULL, sizeof(cmd.version_full));
+#else
+	strlcpy(cmd.version_full, SUKISU_ULTRA_VERSION_FULL, sizeof(cmd.version_full));
+#endif
+
+	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+		pr_err("get_full_version: copy_to_user failed\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int do_sukisu_get_hook_type(void __user *arg)
+{
+  struct ksu_sukisu_get_hook_type_cmd cmd;
+  const char *type = "Manual";
+
+#if defined(CONFIG_KSU_KPROBES)
+  type = "Kprobes";
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
+  strscpy(cmd.hook_type, type, sizeof(cmd.hook_type));
+#else
+  strlcpy(cmd.hook_type, type, sizeof(cmd.hook_type));
+#endif
+
+  if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+    pr_err("get_hook_type: copy_to_user failed\n");
+    return -EFAULT;
+  }
+
+  return 0;
+}
+
+static int do_sukisu_enable_kpm(void __user *arg)
+{
+	struct ksu_sukisu_enable_kpm_cmd cmd;
+
+	cmd.enabled = 0;
+
+	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+		pr_err("enable_kpm: copy_to_user failed\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int sukisu_list_try_umount(void __user *arg)
+{
+	struct ksu_sukisu_list_try_umount_cmd cmd;
+	struct mount_entry *entry;
+	char *output_buf;
+	size_t output_size;
+	size_t offset = 0;
+	int ret = 0;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+
+	output_size = cmd.buf_size ? cmd.buf_size : 4096;
+
+	if (!cmd.arg || output_size == 0)
+		return -EINVAL;
+
+	output_buf = kzalloc(output_size, GFP_KERNEL);
+	if (!output_buf)
+		return -ENOMEM;
+
+	offset += snprintf(output_buf + offset, output_size - offset,
+			   "Mount Point\tFlags\n");
+	offset += snprintf(output_buf + offset, output_size - offset,
+			   "----------\t-----\n");
+
+	down_read(&mount_list_lock);
+	list_for_each_entry (entry, &mount_list, list) {
+		int written =
+			snprintf(output_buf + offset, output_size - offset,
+				 "%s\t%u\n", entry->umountable, entry->flags);
+		if (written < 0) {
+			ret = -EFAULT;
+			break;
+		}
+		if (written >= (int)(output_size - offset)) {
+			ret = -ENOSPC;
+			break;
+		}
+		offset += written;
+	}
+	up_read(&mount_list_lock);
+
+	if (ret == 0) {
+		if (copy_to_user((void __user *)cmd.arg, output_buf, offset))
+			ret = -EFAULT;
+	}
+
+	kfree(output_buf);
+	return ret;
+}
+
 struct list_head mount_list = LIST_HEAD_INIT(mount_list);
 DECLARE_RWSEM(mount_list_lock);
 
@@ -905,6 +1013,31 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .name = "GET_VERSION_TAG",
         .handler = do_get_version_tag,
         .perm_check = manager_or_root
+    },
+	// SukiSU-Ultra Compatibility
+    { 
+        .cmd = KSU_IOCTL_GET_FULL_VERSION,
+        .name = "GET_FULL_VERSION",
+        .handler = do_sukisu_get_full_version,
+        .perm_check = manager_or_root 
+    },
+    {   
+        .cmd = KSU_IOCTL_HOOK_TYPE,
+        .name = "GET_HOOK_TYPE",
+        .handler = do_sukisu_get_hook_type,
+        .perm_check = manager_or_root 
+    },
+    {   
+        .cmd = KSU_IOCTL_ENABLE_KPM,
+        .name = "GET_ENABLE_KPM",
+        .handler = do_sukisu_enable_kpm,
+        .perm_check = manager_or_root 
+    },
+    {   
+        .cmd = KSU_IOCTL_LIST_TRY_UMOUNT,
+        .name = "LIST_TRY_UMOUNT",
+        .handler = sukisu_list_try_umount,
+        .perm_check = manager_or_root 
     },
     {
         .cmd = 0,

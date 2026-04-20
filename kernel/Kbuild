@@ -103,6 +103,9 @@ $(info -- KernelSU-Next tag fallback: $(KSU_VERSION_TAG_FALLBACK))
 ccflags-y += -DKSU_VERSION_TAG=\"$(KSU_VERSION_TAG_FALLBACK)\"
 endif
 
+# SukiSU-Ultra Compatibility
+ccflags-y += -DSUKISU_VERSION_FULL=\"v4.1.2-3298984@unified\"
+
 ifndef KSU_NEXT_MANAGER_SIZE
 KSU_NEXT_MANAGER_SIZE := 0x3e6
 endif
