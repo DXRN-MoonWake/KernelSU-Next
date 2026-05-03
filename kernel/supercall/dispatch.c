@@ -416,6 +416,9 @@ static int do_get_wrapper_fd(void __user *arg) {
 
 static int do_manage_mark(void __user *arg)
 {
+#ifndef CONFIG_KSU_SUSFS
+    return -ENOTSUPP;
+#else
 	struct ksu_manage_mark_cmd cmd;
 	int ret = 0;
 
@@ -426,16 +429,7 @@ static int do_manage_mark(void __user *arg)
 
 	switch (cmd.operation) {
 	case KSU_MARK_GET: {
-#ifndef CONFIG_KSU_SUSFS
-		// Get task mark status
-		ret = ksu_get_task_mark(cmd.pid);
-		if (ret < 0) {
-			pr_err("manage_mark: get failed for pid %d: %d\n", cmd.pid, ret);
-			return ret;
-		}
-		cmd.result = (u32)ret;
-		break;
-#else
+#ifdef CONFIG_KSU_SUSFS
         if (susfs_is_current_proc_umounted()) {
             ret = 0; // SYSCALL_TRACEPOINT is NOT flagged
         } else {
@@ -503,6 +497,7 @@ static int do_manage_mark(void __user *arg)
 	}
 
 	return 0;
+#endif
 }
 
 static int do_get_hook_mode(void __user *arg)
