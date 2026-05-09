@@ -31,7 +31,6 @@
 #endif // #ifdef CONFIG_KSU_SUSFS
 
 extern void disable_seccomp(struct task_struct *tsk);
-
 #ifdef CONFIG_KSU_SUSFS
 static inline bool is_zygote_isolated_service_uid(uid_t uid)
 {
@@ -47,10 +46,7 @@ static inline bool is_zygote_normal_app_uid(uid_t uid)
 
 extern u32 susfs_zygote_sid;
 extern struct cred *ksu_cred;
-
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-extern void susfs_run_sus_path_loop(void);
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+extern struct work_struct susfs_extra_works;
 
 struct susfs_handle_setuid_tw {
     struct callback_head cb;
@@ -61,10 +57,6 @@ static void susfs_handle_setuid_tw_func(struct callback_head *cb)
     struct susfs_handle_setuid_tw *tw = container_of(cb, struct susfs_handle_setuid_tw, cb);
     const struct cred *saved = override_creds(ksu_cred);
 
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-    susfs_run_sus_path_loop();
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-
     revert_creds(saved);
     kfree(tw);
 }
@@ -72,6 +64,8 @@ static void susfs_handle_setuid_tw_func(struct callback_head *cb)
 static void ksu_handle_extra_susfs_work(void)
 {
     struct susfs_handle_setuid_tw *tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
+
+    schedule_work(&susfs_extra_works);
 
     if (!tw) {
         pr_err("susfs: No enough memory\n");
