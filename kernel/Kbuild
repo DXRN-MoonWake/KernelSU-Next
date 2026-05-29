@@ -80,8 +80,8 @@ endif
 
 # Calculate version if git version is available
 ifdef KSU_GIT_VERSION_VALID
-# ksu_version: major * 30000 + git version for historical reasons, + 1500 for ReSukiSU compat (why ReSukiSU?)
-$(eval KSU_VERSION=$(shell expr 30000 + $(KSU_GIT_VERSION) + 150 + 1500))
+# ksu_version: major * 30000 + git version for historical reasons, + 10000 for ReSukiSU compat (why ReSukiSU?)
+$(eval KSU_VERSION=$(shell expr 30000 + 10000 + $(KSU_GIT_VERSION)))
 $(info -- KernelSU-Next version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 else
