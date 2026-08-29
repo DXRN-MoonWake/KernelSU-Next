@@ -47,6 +47,31 @@ static int do_get_info(void __user *arg)
 		cmd.version = ksuver_override;
 	}
 	
+    if (is_manager()) {
+        cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
+    }
+    if (ksu_late_loaded) {
+        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
+    }
+    cmd.features = KSU_FEATURE_MAX;
+    cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
+
+    if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+        pr_err("get_version: copy_to_user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+static int do_get_info_legacy(void __user *arg)
+{
+	struct ksu_get_info_legacy_cmd cmd = {.version = KERNEL_SU_VERSION, .flags = 0};
+
+	if (ksuver_override) {
+		cmd.version = ksuver_override;
+	}
+	
 #ifdef MODULE
 	cmd.flags |= KSU_GET_INFO_FLAG_LKM;
 #endif
